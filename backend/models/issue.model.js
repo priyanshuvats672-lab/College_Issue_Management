@@ -1,19 +1,17 @@
-import { mongo, Schema } from "mongoose";
+import mongoose from "mongoose";
 
-const issueSchema = new Schema({
+const issueSchema = new mongoose.Schema({
     title: {
         type: String,
         required: [true , "Title is required"],
         trim: true,
         maxlength: 100,
-        minlength: 10,
     },
     description: {
         type: String,
         required: [true , "Description is required"],
         trim: true,
         maxlength: 500,
-        minlength: 50,
     },
     category: {
         type: String,
@@ -21,16 +19,20 @@ const issueSchema = new Schema({
         default: "other",
     },
     image: {
-        type: String,
-        publicId: String
-    },
+        url: {
+            type: String
+        },
+        publicId: {
+            type: String
+        }
+},
     reporter: {
-        type: Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
     },
     assignee: {
-        type: Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         default: null,
     },

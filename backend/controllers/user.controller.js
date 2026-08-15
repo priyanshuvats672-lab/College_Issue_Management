@@ -2,7 +2,7 @@ import { config } from "../config/config.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt"
-import { Session } from "../models/session.model.js";
+import Session from "../models/session.model.js";
 
 export async function register(req , res) {
     const {username , email , password} = req.body;
@@ -11,9 +11,10 @@ export async function register(req , res) {
     })
     if(isAlreadyRegisterd){
         return res.status(409).json({
-            message: "User already registered"
+            message: "User already registered",
         })
     }
+    console.log(req.body);
     const hashedPassword = await bcrypt.hash(password , 10);
     const user = await User.create({
         username,
@@ -23,12 +24,12 @@ export async function register(req , res) {
     const refreshToken = jwt.sign({
         id: user._id
     } , config.jwtRefreshKey , {
-        expiresIn: "1d"
+        expiresIn: config.refreshTokenExpiry
     })
     const refreshTokenHash = await bcrypt.hash(refreshToken , 10);
 
     const session = await Session.create({
-        refreshToken : refreshTokenHash,
+        refreshTokenHash,
         user : user._id,
         userAgent: req.headers["user-agent"],
         ip: req.ip
@@ -37,7 +38,7 @@ export async function register(req , res) {
         id: user._id,
         sessionId: session._id
     } , config.jwtAccessKey , {
-        expiresIn: "15m"
+        expiresIn: config.accessTokenExpiry
     })
     return res.status(201).json({
         message: "User registered successfully",
@@ -66,12 +67,12 @@ export async function login(req , res) {
     const refreshToken = jwt.sign({
         id: user._id
     } , config.jwtRefreshKey , {
-        expiresIn: "1d"
+        expiresIn: config.refreshTokenExpiry
     })
     const refreshTokenHash = await bcrypt.hash(refreshToken , 10);
 
     const session = await Session.create({
-        refreshToken : refreshTokenHash,
+        refreshTokenHash,
         user : user._id,
         userAgent: req.headers["user-agent"],
         ip: req.ip
@@ -80,7 +81,7 @@ export async function login(req , res) {
         id: user._id,
         sessionId: session._id
     } , config.jwtAccessKey , {
-        expiresIn: "15m"
+        expiresIn: config.accessTokenExpiry
     })
     return res.status(200).json({
         message: "User logged in successfully",
@@ -90,58 +91,79 @@ export async function login(req , res) {
 
 }
 
-const refreshToken = async (req , res) => {
-    const {refreshToken} = req.body;
+export async function refreshToken(req, res) {
+    const { refreshToken } = req.body;
+
     const session = await Session.findById(req.user.sessionId);
-    if(!session){
+
+    if (!session) {
         return res.status(401).json({
             message: "Invalid refresh token"
-        })
+        });
     }
+
     const isRefreshTokenCorrect = await bcrypt.compare(
-    refreshToken,
-    session.refreshToken
-);
-    if(!isRefreshTokenCorrect){
+        refreshToken,
+        session.refreshTokenHash
+    );
+
+    if (!isRefreshTokenCorrect) {
         return res.status(401).json({
             message: "Invalid refresh token"
-        })
+        });
     }
+
     const user = await User.findById(session.user);
-    if(!user){
+
+    if (!user) {
         return res.status(401).json({
             message: "User not found"
-        })
+        });
     }
-    const accessToken = jwt.sign({
-        id: user._id,
-        sessionId: session._id
-    } , config.jwtAccessKey , {
-        expiresIn: "15m"
-    })
+
+    const accessToken = jwt.sign(
+        {
+            id: user._id,
+            sessionId: session._id
+        },
+        config.jwtAccessKey,
+        {
+            expiresIn: config.accessTokenExpiry
+        }
+    );
+
     return res.status(200).json({
         message: "Refresh token successfully",
         accessToken
-    })
+    });
 }
 
 
-export async function logout(req , res) {
-    const refreshToken = req.body.refreshToken;
+export async function logout(req, res) {
+    const { refreshToken } = req.body;
+
     const session = await Session.findById(req.user.sessionId);
-    if(!session){
+
+    if (!session) {
         return res.status(401).json({
             message: "Invalid refresh token"
-        })
+        });
     }
-    const refreshTokenHash = await bcrypt.hash(refreshToken , 10);
-    if(refreshTokenHash !== session.refreshToken){
+
+    const isRefreshTokenCorrect = await bcrypt.compare(
+        refreshToken,
+        session.refreshTokenHash
+    );
+
+    if (!isRefreshTokenCorrect) {
         return res.status(401).json({
             message: "Invalid refresh token"
-        })
+        });
     }
+
     await Session.findByIdAndDelete(session._id);
+
     return res.status(200).json({
         message: "User logged out successfully"
-    })
+    });
 }
